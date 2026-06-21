@@ -1,0 +1,22 @@
+{
+  "channels": [
+    {"station_id":"35163","number":"1","name":"WSAW-DT (CBS)","callsign":"WSAWDT","service":"YouTube TV"},
+    {"station_id":"32474","number":"4","name":"WAOW-DT (ABC)","callsign":"WAOWDT","service":"YouTube TV"},
+    {"station_id":"34428","number":"2","name":"WJFW-DT (NBC)","callsign":"WJFWDT","service":"YouTube TV"},
+    {"station_id":"96352","number":"3","name":"WZAW-LD (FOX)","callsign":"WZAWLD","service":"YouTube TV"},
+    {"station_id":"59337","number":"107","name":"AMC","callsign":"AMCHD","service":"YouTube TV"},
+    {"station_id":"56905","number":"176","name":"Discovery","callsign":"DSCHD","service":"YouTube TV"},
+    {"station_id":"50747","number":"199","name":"Food Network","callsign":"FOODHD","service":"YouTube TV"},
+    {"station_id":"49788","number":"241","name":"HGTV","callsign":"HGTVD","service":"YouTube TV"},
+    {"station_id":"59186","number":"348","name":"Paramount Network","callsign":"PARHD","service":"YouTube TV"},
+    {"station_id":"58515","number":"416","name":"TBS","callsign":"TBSHD","service":"YouTube TV"},
+    {"station_id":"57391","number":"423","name":"TLC","callsign":"TLCHD","service":"YouTube TV"},
+    {"station_id":"42642","number":"428","name":"TNT","callsign":"TNTHD","service":"YouTube TV"},
+    {"station_id":"103838","number":"453","name":"USA Network","callsign":"USAHDST","service":"YouTube TV"},
+    {"station_id":"10035","number":"2","name":"A&E","callsign":"AETV","service":"Frndly"},
+    {"station_id":"14771","number":"4","name":"History","callsign":"HISTORY","service":"Frndly"},
+    {"station_id":"10918","number":"6","name":"Lifetime","callsign":"LIFE","service":"Frndly"},
+    {"station_id":"48999","number":"25","name":"Military History","callsign":"MILH","service":"Frndly"}
+  ],
+  "days": 14
+}
