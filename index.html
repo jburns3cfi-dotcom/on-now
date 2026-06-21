@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<!-- tvguide index 2026-06-21 -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#11151c">
+<title>On Now</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#11151c; --panel:#1a2029; --panel2:#202836; --line:#2b333f;
+    --text:#e8ebef; --muted:#93a0b0; --amber:#e8a13a; --amber-dim:#7a5a23;
+    --cyan:#4fd1c5; --bad:#e06b5e;
+    --rail:64px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--ink);color:var(--text);
+    font-family:Inter,system-ui,sans-serif;-webkit-text-size-adjust:100%}
+  body{padding-bottom:calc(72px + env(safe-area-inset-bottom))}
+  h1,h2,h3{font-family:"Bricolage Grotesque",Inter,sans-serif;margin:0}
+  .mono{font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums}
+
+  header{position:sticky;top:0;z-index:5;background:linear-gradient(180deg,var(--ink),rgba(17,21,28,.92));
+    backdrop-filter:blur(8px);border-bottom:1px solid var(--line);
+    padding:calc(12px + env(safe-area-inset-top)) 16px 12px}
+  .brand{display:flex;align-items:center;gap:10px}
+  .brand .dot{width:11px;height:11px;border-radius:50%;background:var(--amber);
+    box-shadow:0 0 0 0 var(--amber);animation:pulse 2.4s ease-out infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(232,161,58,.5)}70%{box-shadow:0 0 0 9px rgba(232,161,58,0)}100%{box-shadow:0 0 0 0 rgba(232,161,58,0)}}
+  @media (prefers-reduced-motion:reduce){.brand .dot{animation:none}}
+  h1{font-size:21px;letter-spacing:-.01em;font-weight:800}
+  .sub{color:var(--muted);font-size:12px;margin-top:2px}
+  .titlebar{display:flex;justify-content:space-between;align-items:flex-end}
+  .toggle{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--muted);cursor:pointer;user-select:none}
+  .toggle input{accent-color:var(--amber);width:16px;height:16px}
+
+  main{padding:14px 14px 24px;max-width:680px;margin:0 auto}
+  .view{display:none}
+  .view.active{display:block;animation:fade .18s ease}
+  @keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1}}
+  @media (prefers-reduced-motion:reduce){.view.active{animation:none}}
+
+  /* channel / airing cards */
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;
+    padding:12px 14px;margin-bottom:10px;display:grid;grid-template-columns:var(--rail) 1fr;gap:12px}
+  .rail{display:flex;flex-direction:column;align-items:center;justify-content:center;
+    border-right:1px solid var(--line);padding-right:10px;text-align:center}
+  .chnum{font-family:"IBM Plex Mono",monospace;font-size:19px;font-weight:600;color:var(--amber)}
+  .chname{font-size:10px;color:var(--muted);margin-top:3px;line-height:1.1;word-break:break-word}
+  .body .label{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+  .body .show{font-size:16px;font-weight:600;line-height:1.2;margin:2px 0}
+  .body .ep{font-size:12px;color:var(--muted);margin-bottom:6px}
+  .meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--muted)}
+  .onair{display:inline-flex;align-items:center;gap:5px;background:var(--amber);color:#1a1206;
+    font-weight:600;font-size:10px;letter-spacing:.06em;padding:2px 7px;border-radius:999px;text-transform:uppercase}
+  .new{display:inline-flex;align-items:center;gap:4px;color:var(--cyan);border:1px solid var(--cyan);
+    font-size:10px;font-weight:600;letter-spacing:.05em;padding:1px 6px;border-radius:999px;text-transform:uppercase}
+  .progress{height:4px;background:var(--line);border-radius:3px;margin-top:8px;overflow:hidden}
+  .progress > i{display:block;height:100%;background:var(--amber);border-radius:3px;transition:width .6s ease}
+  .next{margin-top:9px;padding-top:9px;border-top:1px dashed var(--line);font-size:13px;color:var(--muted)}
+  .next b{color:var(--text);font-weight:500}
+
+  /* new feed + watchlist rows */
+  .row{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:11px 13px;margin-bottom:9px}
+  .row .top{display:flex;justify-content:space-between;align-items:center;gap:10px}
+  .row .show{font-size:15px;font-weight:600}
+  .row .when{font-size:13px;color:var(--text);margin-top:4px}
+  .row .when.muted{color:var(--muted)}
+  .row .when .where{color:var(--amber)}
+  .chip-btn{flex:none;border:1px solid var(--amber-dim);background:transparent;color:var(--amber);
+    font-family:Inter;font-size:12px;font-weight:600;padding:6px 10px;border-radius:9px;cursor:pointer}
+  .chip-btn:active{background:rgba(232,161,58,.12)}
+
+  /* setup form */
+  label.field{display:block;font-size:12px;color:var(--muted);margin:12px 0 5px}
+  input[type=text],input[type=number],textarea{width:100%;background:var(--panel2);border:1px solid var(--line);
+    color:var(--text);border-radius:10px;padding:11px 12px;font-family:Inter;font-size:15px}
+  textarea{min-height:120px;resize:vertical;font-family:"IBM Plex Mono",monospace;font-size:13px;line-height:1.5}
+  .help{font-size:12px;color:var(--muted);line-height:1.5;margin:6px 0 0}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;width:100%;
+    background:var(--amber);color:#1a1206;border:none;border-radius:11px;padding:13px;
+    font-family:"Bricolage Grotesque",Inter;font-weight:600;font-size:15px;cursor:pointer;margin-top:16px}
+  .btn.ghost{background:transparent;color:var(--text);border:1px solid var(--line)}
+  .btn:active{filter:brightness(.95)}
+  .stationrow{display:grid;grid-template-columns:1fr 1fr 1.4fr 1fr auto;gap:6px;margin-bottom:6px}
+  .stationrow input{padding:8px;font-size:13px}
+  .stationrow button{background:transparent;border:1px solid var(--line);color:var(--bad);border-radius:8px;cursor:pointer;font-size:16px}
+  .addrow{font-size:13px;color:var(--amber);background:none;border:none;cursor:pointer;padding:4px 0;margin-top:2px}
+
+  .empty{text-align:center;color:var(--muted);padding:48px 16px;line-height:1.6}
+  .empty .big{font-size:15px;color:var(--text);margin-bottom:6px}
+  .stale{background:rgba(224,107,94,.12);border:1px solid var(--bad);color:#f0b3ab;
+    font-size:12px;border-radius:10px;padding:9px 12px;margin-bottom:12px}
+
+  nav{position:fixed;bottom:0;left:0;right:0;z-index:10;display:flex;
+    background:var(--panel);border-top:1px solid var(--line);
+    padding-bottom:env(safe-area-inset-bottom)}
+  nav button{flex:1;background:none;border:none;color:var(--muted);padding:10px 4px 12px;
+    font-family:Inter;font-size:11px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:4px}
+  nav button.active{color:var(--amber)}
+  nav svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.8}
+  .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:84px;z-index:30;
+    background:var(--panel2);border:1px solid var(--line);color:var(--text);
+    padding:11px 16px;border-radius:11px;font-size:13px;max-width:90%;text-align:center;
+    opacity:0;pointer-events:none;transition:opacity .25s}
+  .toast.show{opacity:1}
+</style>
+</head>
+<body>
+<header>
+  <div class="titlebar">
+    <div>
+      <div class="brand"><span class="dot"></span><h1 id="viewTitle">On Now</h1></div>
+      <div class="sub" id="viewSub">Live across your services</div>
+    </div>
+    <label class="toggle" id="newToggleWrap" hidden>
+      <input type="checkbox" id="newOnly"> New first
+    </label>
+  </div>
+</header>
+
+<main>
+  <div id="staleBanner" class="stale" hidden></div>
+  <section id="view-now" class="view active"></section>
+  <section id="view-new" class="view"></section>
+  <section id="view-shows" class="view"></section>
+  <section id="view-setup" class="view"></section>
+</main>
+
+<nav>
+  <button data-view="now" class="active" aria-label="On now">
+    <svg viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M8 21h8"/></svg>On Now</button>
+  <button data-view="new" aria-label="New episodes">
+    <svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18"/></svg>New</button>
+  <button data-view="shows" aria-label="My shows">
+    <svg viewBox="0 0 24 24"><path d="M6 4h12v16l-6-3-6 3z"/></svg>My Shows</button>
+  <button data-view="setup" aria-label="Setup">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></svg>Setup</button>
+</nav>
+
+<div id="toast" class="toast"></div>
+
+<script>
+// ---- tvguide app 2026-06-21 ----------------------------------------------
+// EDIT THESE TWO before deploying (the repo that hosts your guide):
+const REPO_OWNER = "REPLACE_OWNER";
+const REPO_NAME  = "REPLACE_REPO";
+// Generated for you; matches the VAPID secret in GitHub:
+const VAPID_PUBLIC_KEY = "BEpGEakDlmL6dVxQ7GAFYi-4aKxFLTEjX7Pl2lWJ9Jo6naaiMKbRP2bNmD2YucozMtFooYv8r0EO9ns5PUL9e4E";
+
+const S = x => (x===undefined||x===null) ? "" : (""+x);
+const norm = x => S(x).toLowerCase().replace(/[^0-9a-z\u00c0-\uffff ]+/g," ").replace(/\s+/g," ").trim();
+const $ = id => document.getElementById(id);
+const TZ = -new Date().getTimezoneOffset(); // minutes east of UTC, used only server-side note
+
+let SCHEDULE = [], CONFIG = {channels:[],days:14}, WATCH = [], META = null;
+
+function toast(msg){const t=$("toast");t.textContent=msg;t.classList.add("show");
+  clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove("show"),2600);}
+
+function fmtWhen(iso){
+  const d = new Date(iso); if(isNaN(d)) return "";
+  const opt={weekday:"short",hour:"numeric",minute:"2-digit"};
+  return d.toLocaleString([],opt);
+}
+function parse(rec){const s=new Date(rec.start),e=new Date(rec.end);
+  return {...rec,_s:isNaN(s)?null:s,_e:isNaN(e)?null:e};}
+
+async function loadAll(){
+  const get = async (f)=>{try{const r=await fetch(f+"?t="+Date.now());if(!r.ok)return null;return await r.json();}catch(e){return null;}};
+  const [sch,cfg,wl,meta] = await Promise.all([get("schedule.json"),get("config.json"),get("watchlist.json"),get("meta.json")]);
+  SCHEDULE = Array.isArray(sch)?sch.map(parse).filter(r=>r._s):[];
+  CONFIG = (cfg&&typeof cfg==="object")?cfg:{channels:[],days:14};
+  if(!Array.isArray(CONFIG.channels)) CONFIG.channels=[];
+  WATCH = Array.isArray(wl)?wl:(wl&&Array.isArray(wl.titles)?wl.titles:[]);
+  // local-first watchlist edits override the published copy
+  try{const local=JSON.parse(localStorage.getItem("tv_watch")||"null");if(Array.isArray(local))WATCH=local;}catch(e){}
+  META = meta;
+  checkStale();
+}
+function checkStale(){
+  const b=$("staleBanner");
+  if(!META||!META.updated){b.hidden=true;return;}
+  const age=(Date.now()-new Date(META.updated))/36e5;
+  if(age>30){b.hidden=false;b.textContent="Guide data is "+Math.round(age/24*10)/10+" days old — the nightly update may not be running.";}
+  else b.hidden=true;
+}
+
+// ---- view: On Now ---------------------------------------------------------
+function nowAndNext(now){
+  const by={};
+  for(const r of SCHEDULE){const k=r.channel_name||r.channel_number;(by[k]=by[k]||[]).push(r);}
+  const out=[];
+  for(const k in by){
+    const recs=by[k].slice().sort((a,b)=>a._s-b._s);
+    let cur=null,nxt=null;
+    for(const r of recs){
+      if(r._s<=now && r._e && now<r._e) cur=r;
+      else if(r._s>now && !nxt) nxt=r;
+    }
+    if(cur||nxt) out.push({k,num:S((cur||nxt).channel_number),cur,nxt});
+  }
+  return out.sort((a,b)=>S(a.k).localeCompare(S(b.k)));
+}
+function renderNow(){
+  const now=new Date(), rows=nowAndNext(now), el=$("view-now");
+  if(!rows.length){el.innerHTML=emptyBlock("No channels yet","Add your channels in Setup to see what's on.");return;}
+  if($("newOnly").checked) rows.sort((a,b)=>(b.cur&&b.cur.is_new?1:0)-(a.cur&&a.cur.is_new?1:0));
+  el.innerHTML=rows.map(row=>{
+    const c=row.cur;
+    let prog=0;
+    if(c&&c._s&&c._e){const t=(now-c._s)/(c._e-c._s);prog=Math.max(0,Math.min(1,t))*100;}
+    const onNow = c ? `
+      <div class="meta"><span class="onair"><span style="width:6px;height:6px;border-radius:50%;background:#1a1206;display:inline-block"></span>On air</span>
+        ${c.is_new?'<span class="new">New</span>':''}
+        <span class="mono">${fmtWhen(c.start)}</span></div>
+      <div class="show">${esc(c.title)||"Programming"}</div>
+      ${c.episode?`<div class="ep">${esc(c.episode)}</div>`:''}
+      <div class="progress"><i style="width:${prog}%"></i></div>`
+      : `<div class="label">Up next</div>`;
+    const upNext = row.nxt ? `<div class="next">Next: <b>${esc(row.nxt.title)||"Programming"}</b> · <span class="mono">${fmtWhen(row.nxt.start)}</span>${row.nxt.is_new?' · <span style="color:var(--cyan)">New</span>':''}</div>` : "";
+    return `<div class="card"><div class="rail"><div class="chnum">${esc(row.num)||"–"}</div><div class="chname">${esc(row.k)}</div></div>
+      <div class="body">${onNow}${upNext}</div></div>`;
+  }).join("");
+}
+
+// ---- view: New episodes ---------------------------------------------------
+function upcomingNew(now){
+  const best={};
+  for(const r of SCHEDULE){
+    if(!r.is_new||!r._s||r._s<now) continue;
+    const k=norm(r.title); if(!k) continue;
+    if(!best[k]||r._s<best[k]._s) best[k]=r;
+  }
+  return Object.values(best).sort((a,b)=>a._s-b._s).slice(0,200);
+}
+function renderNew(){
+  const rows=upcomingNew(new Date()), el=$("view-new");
+  if(!rows.length){el.innerHTML=emptyBlock("No new episodes ahead","First-run episodes on your channels will show up here within the next two weeks.");return;}
+  el.innerHTML=rows.map(r=>{
+    const watched = WATCH.some(t=>norm(t)===norm(r.title));
+    return `<div class="row"><div class="top"><div>
+        <div class="show">${esc(r.title)||"Programming"}</div>
+        <div class="when"><span class="mono">${fmtWhen(r.start)}</span> · <span class="where">${esc(r.channel_name)}</span>${r.episode?` · ${esc(r.episode)}`:''}</div>
+      </div>
+      <button class="chip-btn" data-add="${escAttr(r.title)}" ${watched?'disabled style="opacity:.4"':''}>${watched?'On list':'Track'}</button>
+      </div></div>`;
+  }).join("");
+  el.querySelectorAll("[data-add]").forEach(b=>b.onclick=()=>{addWatch(b.getAttribute("data-add"));});
+}
+
+// ---- view: My Shows -------------------------------------------------------
+function nextForTitle(title,newOnly){
+  const want=norm(title), now=new Date(); let best=null;
+  for(const r of SCHEDULE){
+    if(!r._s||r._s<now) continue;
+    if(newOnly&&!r.is_new) continue;
+    if(norm(r.title)!==want) continue;
+    if(!best||r._s<best._s) best=r;
+  }
+  return best;
+}
+function renderShows(){
+  const el=$("view-shows");
+  const list = WATCH.map(t=>{
+    const nx=nextForTitle(t,false), nn=nextForTitle(t,true);
+    const line = nx ? `<div class="when"><span class="mono">${fmtWhen(nx.start)}</span> · <span class="where">${esc(nx.channel_name)}</span></div>`
+                    : `<div class="when muted">Not in the next two weeks</div>`;
+    const newline = nn ? `<div class="when muted">New ep: <span class="mono">${fmtWhen(nn.start)}</span> · ${esc(nn.channel_name)}</div>` : "";
+    return `<div class="row"><div class="top"><div class="show">${esc(t)}</div>
+       <button class="chip-btn" style="border-color:var(--line);color:var(--bad)" data-del="${escAttr(t)}">Remove</button></div>
+       ${line}${newline}</div>`;
+  }).join("");
+  el.innerHTML = `
+    <div class="row" style="display:flex;gap:8px;align-items:center">
+      <input type="text" id="addShow" placeholder="Add a show title…" style="flex:1">
+      <button class="chip-btn" id="addShowBtn">Add</button>
+    </div>
+    ${WATCH.length?list:emptyBlock("No shows tracked yet","Add titles above, or tap Track on the New tab.")}
+    ${WATCH.length?'<button class="btn" id="saveShows">Save list &amp; turn on alerts for everyone</button>':''}
+    <p class="help">Saving opens a prefilled GitHub issue — just submit it. The nightly job then sends alerts to every device that turned on notifications.</p>`;
+  $("addShowBtn").onclick=()=>{const v=$("addShow").value;if(v.trim()){addWatch(v);$("addShow").value="";}};
+  $("addShow").addEventListener("keydown",e=>{if(e.key==="Enter"){$("addShowBtn").click();}});
+  el.querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>delWatch(b.getAttribute("data-del")));
+  const ss=$("saveShows"); if(ss) ss.onclick=()=>fileIssue("watchlist",WATCH,"Update watchlist");
+}
+function persistWatch(){try{localStorage.setItem("tv_watch",JSON.stringify(WATCH));}catch(e){}}
+function addWatch(t){t=S(t).trim();if(!t)return;if(WATCH.some(x=>norm(x)===norm(t))){toast("Already on your list");return;}
+  WATCH.push(t);persistWatch();render();toast("Added — Save on My Shows to sync");}
+function delWatch(t){WATCH=WATCH.filter(x=>norm(x)!==norm(t));persistWatch();renderShows();}
+
+// ---- view: Setup ----------------------------------------------------------
+function renderSetup(){
+  const el=$("view-setup");
+  const rows=(CONFIG.channels||[]).map((c,i)=>stationRow(c,i)).join("");
+  el.innerHTML=`
+    <h3 style="font-size:16px;margin-bottom:6px">Your channels</h3>
+    <p class="help">One row per channel you want in the guide. The Station ID comes from your Schedules Direct lineup (see the setup guide). Service = where you watch it.</p>
+    <div id="stationList" style="margin-top:12px">${rows||""}</div>
+    <button class="addrow" id="addStation">+ Add channel</button>
+    <label class="field">Days of guide to load (max 14)</label>
+    <input type="number" id="cfgDays" min="1" max="14" value="${CONFIG.days||14}">
+    <button class="btn" id="saveCfg">Save channels for everyone</button>
+    <button class="btn ghost" id="enableNotif">Turn on notifications on this device</button>
+    <p class="help" id="notifState"></p>`;
+  $("addStation").onclick=()=>{CONFIG.channels.push({station_id:"",number:"",name:"",service:""});renderSetup();};
+  el.querySelectorAll("[data-del-st]").forEach(b=>b.onclick=()=>{CONFIG.channels.splice(+b.getAttribute("data-del-st"),1);renderSetup();});
+  bindStationInputs();
+  $("saveCfg").onclick=()=>{readStations();CONFIG.days=Math.max(1,Math.min(14,+$("cfgDays").value||14));fileIssue("config",CONFIG,"Update channel lineup");};
+  $("enableNotif").onclick=enableNotifications;
+  showNotifState();
+}
+function stationRow(c,i){return `<div class="stationrow">
+  <input type="text" data-st="${i}" data-f="station_id" placeholder="Station ID" value="${escAttr(c.station_id)}">
+  <input type="text" data-st="${i}" data-f="number" placeholder="Ch #" value="${escAttr(c.number)}">
+  <input type="text" data-st="${i}" data-f="name" placeholder="Name" value="${escAttr(c.name)}">
+  <input type="text" data-st="${i}" data-f="service" placeholder="Service" value="${escAttr(c.service)}">
+  <button data-del-st="${i}" aria-label="Remove">×</button></div>`;}
+function bindStationInputs(){document.querySelectorAll("[data-st]").forEach(inp=>{
+  inp.addEventListener("input",()=>{const i=+inp.getAttribute("data-st"),f=inp.getAttribute("data-f");
+    if(CONFIG.channels[i])CONFIG.channels[i][f]=inp.value;});});}
+function readStations(){document.querySelectorAll("[data-st]").forEach(inp=>{
+  const i=+inp.getAttribute("data-st"),f=inp.getAttribute("data-f");if(CONFIG.channels[i])CONFIG.channels[i][f]=inp.value;});
+  CONFIG.channels=CONFIG.channels.filter(c=>S(c.station_id).trim());}
+
+// ---- notifications --------------------------------------------------------
+function urlB64ToUint8(base64){const pad="=".repeat((4-base64.length%4)%4);
+  const b=(base64+pad).replace(/-/g,"+").replace(/_/g,"/");const raw=atob(b);
+  return Uint8Array.from([...raw].map(c=>c.charCodeAt(0)));}
+async function enableNotifications(){
+  try{
+    if(!("serviceWorker" in navigator)||!("PushManager" in window)){toast("This device can't do web push");return;}
+    const perm=await Notification.requestPermission();
+    if(perm!=="granted"){toast("Notifications were not allowed");return;}
+    const reg=await navigator.serviceWorker.ready;
+    const sub=await reg.pushManager.subscribe({userVisibleOnly:true,
+      applicationServerKey:urlB64ToUint8(VAPID_PUBLIC_KEY)});
+    fileIssue("subscribe",JSON.parse(JSON.stringify(sub)),"Register device for alerts");
+    showNotifState(true);
+  }catch(e){toast("Could not enable notifications");}
+}
+async function showNotifState(justEnabled){
+  const el=$("notifState"); if(!el) return;
+  let on=false;
+  try{const reg=await navigator.serviceWorker.getRegistration();const s=reg&&await reg.pushManager.getSubscription();on=!!s;}catch(e){}
+  el.textContent = (on||justEnabled) ? "Notifications on for this device. Each device enables its own."
+    : "Notifications are off on this device.";
+}
+
+// ---- write path: prefilled GitHub issue -----------------------------------
+function b64uJSON(obj){const json=JSON.stringify(obj);
+  const bytes=new TextEncoder().encode(json);let bin="";bytes.forEach(b=>bin+=String.fromCharCode(b));
+  return btoa(bin).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");}
+function fileIssue(type,data,title){
+  if(REPO_OWNER==="REPLACE_OWNER"){toast("Set REPO_OWNER / REPO_NAME first");return;}
+  const payload={type,data};
+  const body="Submitted from the TV guide app — just press **Create**.\n\n```\nTVGUIDE_PAYLOAD:"+b64uJSON(payload)+"\n```";
+  const url=`https://github.com/${REPO_OWNER}/${REPO_NAME}/issues/new?title=${encodeURIComponent("[tvguide] "+title)}&body=${encodeURIComponent(body)}`;
+  window.open(url,"_blank","noopener");
+  toast("Opening GitHub — press Create to save");
+}
+
+// ---- helpers + routing ----------------------------------------------------
+function esc(s){return S(s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));}
+function escAttr(s){return esc(s).replace(/"/g,"&quot;");}
+function emptyBlock(big,small){return `<div class="empty"><div class="big">${esc(big)}</div>${esc(small)}</div>`;}
+
+const TITLES={now:["On Now","Live across your services"],new:["New Episodes","First-run, next two weeks"],
+  shows:["My Shows","Next airings for your list"],setup:["Setup","Channels & notifications"]};
+let CURRENT="now";
+function render(){
+  if(CURRENT==="now")renderNow();
+  else if(CURRENT==="new")renderNew();
+  else if(CURRENT==="shows")renderShows();
+  else if(CURRENT==="setup")renderSetup();
+}
+function go(view){
+  CURRENT=view;
+  document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
+  $("view-"+view).classList.add("active");
+  document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("active",b.dataset.view===view));
+  $("viewTitle").textContent=TITLES[view][0];$("viewSub").textContent=TITLES[view][1];
+  $("newToggleWrap").hidden = view!=="now";
+  render();
+}
+document.querySelectorAll("nav button").forEach(b=>b.onclick=()=>go(b.dataset.view));
+$("newOnly").onchange=()=>renderNow();
+
+if("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(()=>{});
+loadAll().then(()=>{render();});
+setInterval(()=>{ if(CURRENT==="now") renderNow(); }, 60000); // keep "now" live
+</script>
+</body>
+</html>
