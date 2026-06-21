@@ -94,6 +94,27 @@
   .svclist{display:flex;flex-direction:column;gap:8px;margin:12px 0 18px}
   .svc{display:flex;align-items:center;gap:11px;padding:13px 14px;background:var(--panel);border:1px solid var(--line);border-radius:11px;font-size:15px;cursor:pointer;user-select:none}
   .svc input{accent-color:var(--amber);width:19px;height:19px;flex:none}
+  .search{width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--text);
+    border-radius:11px;padding:12px 14px;font-family:Inter;font-size:15px;margin-bottom:12px}
+  .showrow{display:flex;align-items:center;gap:10px;background:var(--panel);border:1px solid var(--line);
+    border-radius:12px;padding:12px 13px;margin-bottom:8px;cursor:pointer}
+  .showrow .grow{flex:1;min-width:0}
+  .showrow .nm{font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .showrow .meta2{font-size:12px;color:var(--muted);margin-top:3px}
+  .star{flex:none;width:38px;height:38px;border-radius:9px;border:1px solid var(--line);background:transparent;
+    color:var(--muted);font-size:18px;cursor:pointer;line-height:1}
+  .star.on{color:var(--amber);border-color:var(--amber-dim)}
+  .sheet{position:fixed;inset:0;z-index:40;background:rgba(8,10,14,.66);display:flex;align-items:flex-end;
+    backdrop-filter:blur(2px)}
+  .sheet-card{background:var(--ink);border-top:1px solid var(--line);border-radius:18px 18px 0 0;
+    width:100%;max-width:680px;margin:0 auto;max-height:86vh;overflow:auto;padding:16px 16px calc(20px + env(safe-area-inset-bottom))}
+  .sheet-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:14px}
+  .sheet-head h2{font-size:20px;font-weight:800}
+  #sheetClose{background:none;border:none;color:var(--muted);font-size:28px;line-height:1;cursor:pointer;flex:none}
+  .airing{display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid var(--line);font-size:14px}
+  .airing:last-child{border-bottom:none}
+  .airing .w{font-family:"IBM Plex Mono",monospace;color:var(--text);flex:1}
+  .airing .ch{color:var(--amber)}
 
   .empty{text-align:center;color:var(--muted);padding:48px 16px;line-height:1.6}
   .empty .big{font-size:15px;color:var(--text);margin-bottom:6px}
@@ -130,18 +151,29 @@
 <main>
   <div id="staleBanner" class="stale" hidden></div>
   <section id="view-now" class="view active"></section>
-  <section id="view-new" class="view"></section>
-  <section id="view-shows" class="view"></section>
+  <section id="view-browse" class="view"></section>
+  <section id="view-favorites" class="view"></section>
   <section id="view-setup" class="view"></section>
 </main>
+
+<div id="sheet" class="sheet" hidden>
+  <div class="sheet-card">
+    <div class="sheet-head">
+      <div><h2 id="sheetTitle"></h2><div class="sub" id="sheetSub"></div></div>
+      <button id="sheetClose" aria-label="Close">×</button>
+    </div>
+    <button class="btn" id="sheetFav"></button>
+    <div id="sheetBody"></div>
+  </div>
+</div>
 
 <nav>
   <button data-view="now" class="active" aria-label="On now">
     <svg viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M8 21h8"/></svg>On Now</button>
-  <button data-view="new" aria-label="New episodes">
-    <svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18"/></svg>New</button>
-  <button data-view="shows" aria-label="My shows">
-    <svg viewBox="0 0 24 24"><path d="M6 4h12v16l-6-3-6 3z"/></svg>My Shows</button>
+  <button data-view="browse" aria-label="Browse shows">
+    <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>Browse</button>
+  <button data-view="favorites" aria-label="Favorites">
+    <svg viewBox="0 0 24 24"><path d="M12 3l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9 6.8 19.2l1-5.8L3.5 9.2l5.9-.9z"/></svg>Favorites</button>
   <button data-view="setup" aria-label="Setup">
     <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></svg>Setup</button>
 </nav>
@@ -240,32 +272,18 @@ function renderNow(){
   }).join("");
 }
 
-// ---- view: New episodes ---------------------------------------------------
-function upcomingNew(now){
-  const best={};
+// ---- show index + lookups -------------------------------------------------
+function showIndex(){
+  const now=new Date(), map={};
   for(const r of visible()){
-    if(!r.is_new||!r._s||r._s<now) continue;
+    if(!r._s||r._s<now) continue;
     const k=norm(r.title); if(!k) continue;
-    if(!best[k]||r._s<best[k]._s) best[k]=r;
+    const m=map[k]||(map[k]={title:r.title,key:k,next:null,nextNew:null});
+    if(!m.next||r._s<m.next._s) m.next=r;
+    if(r.is_new&&(!m.nextNew||r._s<m.nextNew._s)) m.nextNew=r;
   }
-  return Object.values(best).sort((a,b)=>a._s-b._s).slice(0,200);
+  return Object.values(map).sort((a,b)=>S(a.title).localeCompare(S(b.title)));
 }
-function renderNew(){
-  const rows=upcomingNew(new Date()), el=$("view-new");
-  if(!rows.length){el.innerHTML=emptyBlock("No new episodes ahead","First-run episodes on your channels will show up here within the next two weeks.");return;}
-  el.innerHTML=rows.map(r=>{
-    const watched = WATCH.some(t=>norm(t)===norm(r.title));
-    return `<div class="row"><div class="top"><div>
-        <div class="show">${esc(r.title)||"Programming"}</div>
-        <div class="when"><span class="mono">${fmtWhen(r.start)}</span> · <span class="where">${esc(r.channel_name)}</span>${r.episode?` · ${esc(r.episode)}`:''}</div>
-      </div>
-      <button class="chip-btn" data-add="${escAttr(r.title)}" ${watched?'disabled style="opacity:.4"':''}>${watched?'On list':'Track'}</button>
-      </div></div>`;
-  }).join("");
-  el.querySelectorAll("[data-add]").forEach(b=>b.onclick=()=>{addWatch(b.getAttribute("data-add"));});
-}
-
-// ---- view: My Shows -------------------------------------------------------
 function nextForTitle(title,newOnly){
   const want=norm(title), now=new Date(); let best=null;
   for(const r of visible()){
@@ -276,34 +294,85 @@ function nextForTitle(title,newOnly){
   }
   return best;
 }
-function renderShows(){
-  const el=$("view-shows");
-  const list = WATCH.map(t=>{
-    const nx=nextForTitle(t,false), nn=nextForTitle(t,true);
-    const line = nx ? `<div class="when"><span class="mono">${fmtWhen(nx.start)}</span> · <span class="where">${esc(nx.channel_name)}</span></div>`
-                    : `<div class="when muted">Not in the next two weeks</div>`;
-    const newline = nn ? `<div class="when muted">New ep: <span class="mono">${fmtWhen(nn.start)}</span> · ${esc(nn.channel_name)}</div>` : "";
-    return `<div class="row"><div class="top"><div class="show">${esc(t)}</div>
-       <button class="chip-btn" style="border-color:var(--line);color:var(--bad)" data-del="${escAttr(t)}">Remove</button></div>
-       ${line}${newline}</div>`;
+function airingsForTitle(title){
+  const want=norm(title), now=new Date(), out=[];
+  for(const r of visible()){ if(r._s&&r._s>=now&&norm(r.title)===want) out.push(r); }
+  return out.sort((a,b)=>a._s-b._s);
+}
+function isFav(t){return WATCH.some(x=>norm(x)===norm(t));}
+function toggleFav(t){ if(isFav(t)) delWatch(t); else addWatch(t); }
+
+// ---- view: Browse / search ------------------------------------------------
+function renderBrowse(){
+  const el=$("view-browse");
+  const q=S(el._q||"").trim();
+  const shows=showIndex().filter(s=>!q||norm(s.title).includes(norm(q)));
+  const rows=shows.slice(0,400).map(s=>{
+    const on=isFav(s.title)?"on":"";
+    const when=s.nextNew?`New ep ${fmtWhen(s.nextNew.start)} · ${esc(s.nextNew.channel_name)}`
+              :(s.next?`Next ${fmtWhen(s.next.start)} · ${esc(s.next.channel_name)}`:"");
+    return `<div class="showrow" data-show="${escAttr(s.title)}">
+      <div class="grow"><div class="nm">${esc(s.title)||"Programming"}</div><div class="meta2">${when}</div></div>
+      <button class="star ${on}" data-fav="${escAttr(s.title)}" aria-label="Favorite">${on?"★":"☆"}</button></div>`;
   }).join("");
-  el.innerHTML = `
+  el.innerHTML=`<input class="search" id="browseQ" placeholder="Search shows…" value="${escAttr(q)}">
+    ${shows.length?rows:emptyBlock(q?"No matches":"No shows yet","Pick your services in Setup, or the guide hasn't loaded.")}`;
+  const inp=$("browseQ");
+  inp.oninput=()=>{el._q=inp.value;const p=inp.selectionStart;renderBrowse();const n=$("browseQ");if(n){n.focus();try{n.setSelectionRange(p,p);}catch(e){}}};
+  el.querySelectorAll("[data-fav]").forEach(b=>b.onclick=(e)=>{e.stopPropagation();toggleFav(b.getAttribute("data-fav"));renderBrowse();});
+  el.querySelectorAll("[data-show]").forEach(b=>b.onclick=()=>openShow(b.getAttribute("data-show")));
+}
+
+// ---- view: Favorites ------------------------------------------------------
+function renderFavorites(){
+  const el=$("view-favorites");
+  const list=WATCH.map(t=>{
+    const nn=nextForTitle(t,true), nx=nextForTitle(t,false);
+    const primary=nn?`<div class="when">New ep: <span class="mono">${fmtWhen(nn.start)}</span> · <span class="where">${esc(nn.channel_name)}</span></div>`
+                    :`<div class="when muted">No new episode scheduled yet</div>`;
+    const fallback=(nx&&(!nn||nx.program_id!==nn.program_id))?`<div class="when muted">Next on: <span class="mono">${fmtWhen(nx.start)}</span> · ${esc(nx.channel_name)}</div>`:"";
+    return `<div class="row"><div class="top"><div class="show" data-show="${escAttr(t)}" style="cursor:pointer">${esc(t)}</div>
+       <button class="chip-btn" style="border-color:var(--line);color:var(--bad)" data-del="${escAttr(t)}">Remove</button></div>
+       ${primary}${fallback}</div>`;
+  }).join("");
+  el.innerHTML=`
     <div class="row" style="display:flex;gap:8px;align-items:center">
-      <input type="text" id="addShow" placeholder="Add a show title…" style="flex:1">
+      <input type="text" id="addShow" placeholder="Add a show by name…" style="flex:1">
       <button class="chip-btn" id="addShowBtn">Add</button>
     </div>
-    ${WATCH.length?list:emptyBlock("No shows tracked yet","Add titles above, or tap Track on the New tab.")}
+    ${WATCH.length?list:emptyBlock("No favorites yet","Add a show by name above, or find shows on the Browse tab.")}
     ${WATCH.length?'<button class="btn" id="saveShows">Save my shows &amp; alerts</button>':''}
-    <p class="help">Your shows are saved on this device. To get alerts for them, tap save — it files a quick GitHub issue (press Create). Alerts go only to this device, for your shows.</p>`;
-  $("addShowBtn").onclick=()=>{const v=$("addShow").value;if(v.trim()){addWatch(v);$("addShow").value="";}};
+    <p class="help">Saved on this device. Tap save to get alerts for your shows (files a quick GitHub issue — press Create). Alerts come only to this device.</p>`;
+  $("addShowBtn").onclick=()=>{const v=$("addShow").value;if(v.trim()){addWatch(v);$("addShow").value="";renderFavorites();}};
   $("addShow").addEventListener("keydown",e=>{if(e.key==="Enter"){$("addShowBtn").click();}});
-  el.querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>delWatch(b.getAttribute("data-del")));
+  el.querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>{delWatch(b.getAttribute("data-del"));renderFavorites();});
+  el.querySelectorAll("[data-show]").forEach(b=>b.onclick=()=>openShow(b.getAttribute("data-show")));
   const ss=$("saveShows"); if(ss) ss.onclick=()=>registerDevice("Update my shows");
 }
+
+// ---- show detail sheet ----------------------------------------------------
+function openShow(title){
+  const airings=airingsForTitle(title);
+  $("sheetTitle").textContent=S(title);
+  const newCount=airings.filter(a=>a.is_new).length;
+  $("sheetSub").textContent=airings.length?(newCount?`${newCount} new episode${newCount>1?"s":""} ahead`:"Reruns only in the next two weeks"):"Nothing scheduled in the next two weeks";
+  const fav=isFav(title), fb=$("sheetFav");
+  fb.textContent=fav?"★ Remove from favorites":"☆ Add to favorites";
+  fb.className=fav?"btn ghost":"btn";
+  fb.onclick=()=>{toggleFav(title);openShow(title);renderFavorites();renderBrowse();};
+  $("sheetBody").innerHTML=airings.length?airings.slice(0,60).map(a=>`
+     <div class="airing"><span class="w">${fmtWhen(a.start)}</span>
+       ${a.is_new?'<span class="new">New</span>':'<span style="color:var(--muted);font-size:11px">Rerun</span>'}
+       <span class="ch">${esc(a.channel_name)}</span></div>`).join("")
+    :`<p class="help">This show isn't in the next two weeks of the guide. Keep it in favorites and it'll show here — with an alert — when it returns.</p>`;
+  $("sheet").hidden=false;
+}
+function closeSheet(){$("sheet").hidden=true;}
+
 function persistWatch(){try{localStorage.setItem("tv_watch",JSON.stringify(WATCH));}catch(e){}}
-function addWatch(t){t=S(t).trim();if(!t)return;if(WATCH.some(x=>norm(x)===norm(t))){toast("Already on your list");return;}
-  WATCH.push(t);persistWatch();render();toast("Added — tap Save my shows to get alerts");}
-function delWatch(t){WATCH=WATCH.filter(x=>norm(x)!==norm(t));persistWatch();renderShows();}
+function addWatch(t){t=S(t).trim();if(!t)return;if(WATCH.some(x=>norm(x)===norm(t))){toast("Already in favorites");return;}
+  WATCH.push(t);persistWatch();toast("Added to favorites");}
+function delWatch(t){WATCH=WATCH.filter(x=>norm(x)!==norm(t));persistWatch();}
 
 // ---- view: Setup (per-user: pick your services + notifications) -----------
 function renderSetup(){
@@ -380,13 +449,13 @@ function esc(s){return S(s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&g
 function escAttr(s){return esc(s).replace(/"/g,"&quot;");}
 function emptyBlock(big,small){return `<div class="empty"><div class="big">${esc(big)}</div>${esc(small)}</div>`;}
 
-const TITLES={now:["On Now","Live across your services"],new:["New Episodes","First-run, next two weeks"],
-  shows:["My Shows","Next airings for your list"],setup:["Setup","Your services & alerts"]};
+const TITLES={now:["On Now","What's playing across your networks"],browse:["Browse","Find any show on your networks"],
+  favorites:["Favorites","Your shows & their next new episode"],setup:["Setup","Your services & alerts"]};
 let CURRENT="now";
 function render(){
   if(CURRENT==="now")renderNow();
-  else if(CURRENT==="new")renderNew();
-  else if(CURRENT==="shows")renderShows();
+  else if(CURRENT==="browse")renderBrowse();
+  else if(CURRENT==="favorites")renderFavorites();
   else if(CURRENT==="setup")renderSetup();
 }
 function go(view){
@@ -398,6 +467,8 @@ function go(view){
   $("newToggleWrap").hidden = view!=="now";
   render();
 }
+$("sheetClose").onclick=closeSheet;
+$("sheet").onclick=(e)=>{if(e.target===$("sheet"))closeSheet();};
 document.querySelectorAll("nav button").forEach(b=>b.onclick=()=>go(b.dataset.view));
 $("newOnly").onchange=()=>renderNow();
 
