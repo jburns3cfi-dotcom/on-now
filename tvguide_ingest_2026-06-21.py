@@ -64,37 +64,33 @@ def extract_payload(body) -> dict | None:
         return None
 
 
-def apply_subscribe(data) -> bool:
-    sub = data.get("data") if isinstance(data, dict) else None
+def apply_register(data) -> bool:
+    """Upsert one device's {subscription, watchlist, services, tz} by endpoint."""
+    d = data.get("data") if isinstance(data, dict) else None
+    if not isinstance(d, dict):
+        return False
+    sub = d.get("subscription")
     if not isinstance(sub, dict):
         return False
     endpoint = core.safe_str(sub.get("endpoint"))
     if not endpoint:
         return False
+    wl = d.get("watchlist")
+    services = d.get("services")
+    record = {
+        "subscription": sub,
+        "watchlist": [core.safe_str(t) for t in wl if core.safe_str(t)] if isinstance(wl, list) else [],
+        "services": [core.safe_str(s) for s in services if core.safe_str(s)] if isinstance(services, list) else [],
+        "tz": core.safe_int(d.get("tz"), 0),
+    }
     subs = read_json("subscribers.json", [])
     if not isinstance(subs, list):
         subs = []
     kept = [s for s in subs
             if isinstance(s, dict)
             and core.safe_str((s.get("subscription") or {}).get("endpoint")) != endpoint]
-    kept.append({"subscription": sub})
+    kept.append(record)
     write_json("subscribers.json", kept)
-    return True
-
-
-def apply_watchlist(data) -> bool:
-    titles = data.get("data") if isinstance(data, dict) else None
-    if not isinstance(titles, list):
-        return False
-    clean = []
-    seen = set()
-    for t in titles:
-        s = core.safe_str(t)
-        key = core.normalize_title(s)
-        if s and key and key not in seen:
-            seen.add(key)
-            clean.append(s)
-    write_json("watchlist.json", {"titles": clean})
     return True
 
 
@@ -137,8 +133,7 @@ def main(argv):
         print("no valid payload")
         return 0
     kind = core.safe_str(data.get("type"))
-    handler = {"subscribe": apply_subscribe, "watchlist": apply_watchlist,
-               "config": apply_config}.get(kind)
+    handler = {"register": apply_register, "config": apply_config}.get(kind)
     if not handler:
         print("unknown payload type: %s" % kind)
         return 0

@@ -91,6 +91,9 @@
   .stationrow input{padding:8px;font-size:13px}
   .stationrow button{background:transparent;border:1px solid var(--line);color:var(--bad);border-radius:8px;cursor:pointer;font-size:16px}
   .addrow{font-size:13px;color:var(--amber);background:none;border:none;cursor:pointer;padding:4px 0;margin-top:2px}
+  .svclist{display:flex;flex-direction:column;gap:8px;margin:12px 0 18px}
+  .svc{display:flex;align-items:center;gap:11px;padding:13px 14px;background:var(--panel);border:1px solid var(--line);border-radius:11px;font-size:15px;cursor:pointer;user-select:none}
+  .svc input{accent-color:var(--amber);width:19px;height:19px;flex:none}
 
   .empty{text-align:center;color:var(--muted);padding:48px 16px;line-height:1.6}
   .empty .big{font-size:15px;color:var(--text);margin-bottom:6px}
@@ -160,6 +163,14 @@ const TZ = -new Date().getTimezoneOffset(); // minutes east of UTC, used only se
 
 let SCHEDULE = [], CONFIG = {channels:[],days:14}, WATCH = [], META = null;
 
+// ---- per-user preferences (stored on THIS device only) --------------------
+function selectedServices(){try{const a=JSON.parse(localStorage.getItem("tv_services")||"null");return Array.isArray(a)?a:null;}catch(e){return null;}}
+function setSelectedServices(arr){try{localStorage.setItem("tv_services",JSON.stringify(arr));}catch(e){}}
+function recServices(r){return Array.isArray(r.services)?r.services:(r.service?[r.service]:[]);}
+function serviceUniverse(){const seen=[],s=new Set();for(const r of SCHEDULE){for(const n of recServices(r)){const k=S(n).toLowerCase();if(n&&!s.has(k)){s.add(k);seen.push(S(n));}}}return seen.sort((a,b)=>a.localeCompare(b));}
+function visible(){const sel=selectedServices();if(!sel||!sel.length)return SCHEDULE;const s=new Set(sel.map(x=>S(x).toLowerCase()));return SCHEDULE.filter(r=>recServices(r).some(n=>s.has(S(n).toLowerCase())));}
+async function pushSubscription(){try{const reg=await navigator.serviceWorker.getRegistration();return reg?await reg.pushManager.getSubscription():null;}catch(e){return null;}}
+
 function toast(msg){const t=$("toast");t.textContent=msg;t.classList.add("show");
   clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove("show"),2600);}
 
@@ -194,7 +205,7 @@ function checkStale(){
 // ---- view: On Now ---------------------------------------------------------
 function nowAndNext(now){
   const by={};
-  for(const r of SCHEDULE){const k=r.channel_name||r.channel_number;(by[k]=by[k]||[]).push(r);}
+  for(const r of visible()){const k=r.channel_name||r.channel_number;(by[k]=by[k]||[]).push(r);}
   const out=[];
   for(const k in by){
     const recs=by[k].slice().sort((a,b)=>a._s-b._s);
@@ -209,7 +220,7 @@ function nowAndNext(now){
 }
 function renderNow(){
   const now=new Date(), rows=nowAndNext(now), el=$("view-now");
-  if(!rows.length){el.innerHTML=emptyBlock("No channels yet","Add your channels in Setup to see what's on.");return;}
+  if(!rows.length){el.innerHTML=emptyBlock("Nothing to show","Pick your services in Setup, or the guide hasn't loaded yet.");return;}
   if($("newOnly").checked) rows.sort((a,b)=>(b.cur&&b.cur.is_new?1:0)-(a.cur&&a.cur.is_new?1:0));
   el.innerHTML=rows.map(row=>{
     const c=row.cur;
@@ -232,7 +243,7 @@ function renderNow(){
 // ---- view: New episodes ---------------------------------------------------
 function upcomingNew(now){
   const best={};
-  for(const r of SCHEDULE){
+  for(const r of visible()){
     if(!r.is_new||!r._s||r._s<now) continue;
     const k=norm(r.title); if(!k) continue;
     if(!best[k]||r._s<best[k]._s) best[k]=r;
@@ -257,7 +268,7 @@ function renderNew(){
 // ---- view: My Shows -------------------------------------------------------
 function nextForTitle(title,newOnly){
   const want=norm(title), now=new Date(); let best=null;
-  for(const r of SCHEDULE){
+  for(const r of visible()){
     if(!r._s||r._s<now) continue;
     if(newOnly&&!r.is_new) continue;
     if(norm(r.title)!==want) continue;
@@ -282,51 +293,43 @@ function renderShows(){
       <button class="chip-btn" id="addShowBtn">Add</button>
     </div>
     ${WATCH.length?list:emptyBlock("No shows tracked yet","Add titles above, or tap Track on the New tab.")}
-    ${WATCH.length?'<button class="btn" id="saveShows">Save list &amp; turn on alerts for everyone</button>':''}
-    <p class="help">Saving opens a prefilled GitHub issue — just submit it. The nightly job then sends alerts to every device that turned on notifications.</p>`;
+    ${WATCH.length?'<button class="btn" id="saveShows">Save my shows &amp; alerts</button>':''}
+    <p class="help">Your shows are saved on this device. To get alerts for them, tap save — it files a quick GitHub issue (press Create). Alerts go only to this device, for your shows.</p>`;
   $("addShowBtn").onclick=()=>{const v=$("addShow").value;if(v.trim()){addWatch(v);$("addShow").value="";}};
   $("addShow").addEventListener("keydown",e=>{if(e.key==="Enter"){$("addShowBtn").click();}});
   el.querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>delWatch(b.getAttribute("data-del")));
-  const ss=$("saveShows"); if(ss) ss.onclick=()=>fileIssue("watchlist",WATCH,"Update watchlist");
+  const ss=$("saveShows"); if(ss) ss.onclick=()=>registerDevice("Update my shows");
 }
 function persistWatch(){try{localStorage.setItem("tv_watch",JSON.stringify(WATCH));}catch(e){}}
 function addWatch(t){t=S(t).trim();if(!t)return;if(WATCH.some(x=>norm(x)===norm(t))){toast("Already on your list");return;}
-  WATCH.push(t);persistWatch();render();toast("Added — Save on My Shows to sync");}
+  WATCH.push(t);persistWatch();render();toast("Added — tap Save my shows to get alerts");}
 function delWatch(t){WATCH=WATCH.filter(x=>norm(x)!==norm(t));persistWatch();renderShows();}
 
-// ---- view: Setup ----------------------------------------------------------
+// ---- view: Setup (per-user: pick your services + notifications) -----------
 function renderSetup(){
   const el=$("view-setup");
-  const rows=(CONFIG.channels||[]).map((c,i)=>stationRow(c,i)).join("");
+  const all=serviceUniverse();
+  const sel=selectedServices();
+  const chosen=new Set((sel&&sel.length?sel:all).map(x=>S(x).toLowerCase()));
+  const toggles = all.length ? all.map(name=>{
+    const on=chosen.has(S(name).toLowerCase());
+    return `<label class="svc"><input type="checkbox" data-svc="${escAttr(name)}" ${on?"checked":""}> ${esc(name)}</label>`;
+  }).join("") : `<p class="help">No services in the guide yet — once it's built they'll appear here.</p>`;
   el.innerHTML=`
-    <h3 style="font-size:16px;margin-bottom:6px">Your channels</h3>
-    <p class="help">One row per channel you want in the guide. The Station ID comes from your Schedules Direct lineup (see the setup guide). Service = where you watch it.</p>
-    <div id="stationList" style="margin-top:12px">${rows||""}</div>
-    <button class="addrow" id="addStation">+ Add channel</button>
-    <label class="field">Days of guide to load (max 14)</label>
-    <input type="number" id="cfgDays" min="1" max="14" value="${CONFIG.days||14}">
-    <button class="btn" id="saveCfg">Save channels for everyone</button>
+    <h3 style="font-size:16px;margin-bottom:6px">Your services</h3>
+    <p class="help">Tick the services you have. The guide will show just those channels — only on this device.</p>
+    <div class="svclist">${toggles}</div>
     <button class="btn ghost" id="enableNotif">Turn on notifications on this device</button>
     <p class="help" id="notifState"></p>`;
-  $("addStation").onclick=()=>{CONFIG.channels.push({station_id:"",number:"",name:"",service:""});renderSetup();};
-  el.querySelectorAll("[data-del-st]").forEach(b=>b.onclick=()=>{CONFIG.channels.splice(+b.getAttribute("data-del-st"),1);renderSetup();});
-  bindStationInputs();
-  $("saveCfg").onclick=()=>{readStations();CONFIG.days=Math.max(1,Math.min(14,+$("cfgDays").value||14));fileIssue("config",CONFIG,"Update channel lineup");};
+  el.querySelectorAll("[data-svc]").forEach(cb=>cb.onchange=()=>{
+    const picked=[...el.querySelectorAll("[data-svc]")].filter(x=>x.checked).map(x=>x.getAttribute("data-svc"));
+    setSelectedServices(picked);
+    if(picked.length) toast("Showing your services"); else toast("Showing all channels");
+    pushSubscription().then(s=>{ if(s) registerDevice("Update my services", true); });
+  });
   $("enableNotif").onclick=enableNotifications;
   showNotifState();
 }
-function stationRow(c,i){return `<div class="stationrow">
-  <input type="text" data-st="${i}" data-f="station_id" placeholder="Station ID" value="${escAttr(c.station_id)}">
-  <input type="text" data-st="${i}" data-f="number" placeholder="Ch #" value="${escAttr(c.number)}">
-  <input type="text" data-st="${i}" data-f="name" placeholder="Name" value="${escAttr(c.name)}">
-  <input type="text" data-st="${i}" data-f="service" placeholder="Service" value="${escAttr(c.service)}">
-  <button data-del-st="${i}" aria-label="Remove">×</button></div>`;}
-function bindStationInputs(){document.querySelectorAll("[data-st]").forEach(inp=>{
-  inp.addEventListener("input",()=>{const i=+inp.getAttribute("data-st"),f=inp.getAttribute("data-f");
-    if(CONFIG.channels[i])CONFIG.channels[i][f]=inp.value;});});}
-function readStations(){document.querySelectorAll("[data-st]").forEach(inp=>{
-  const i=+inp.getAttribute("data-st"),f=inp.getAttribute("data-f");if(CONFIG.channels[i])CONFIG.channels[i][f]=inp.value;});
-  CONFIG.channels=CONFIG.channels.filter(c=>S(c.station_id).trim());}
 
 // ---- notifications --------------------------------------------------------
 function urlB64ToUint8(base64){const pad="=".repeat((4-base64.length%4)%4);
@@ -338,11 +341,18 @@ async function enableNotifications(){
     const perm=await Notification.requestPermission();
     if(perm!=="granted"){toast("Notifications were not allowed");return;}
     const reg=await navigator.serviceWorker.ready;
-    const sub=await reg.pushManager.subscribe({userVisibleOnly:true,
+    await reg.pushManager.subscribe({userVisibleOnly:true,
       applicationServerKey:urlB64ToUint8(VAPID_PUBLIC_KEY)});
-    fileIssue("subscribe",JSON.parse(JSON.stringify(sub)),"Register device for alerts");
+    registerDevice("Turn on my alerts");
     showNotifState(true);
   }catch(e){toast("Could not enable notifications");}
+}
+async function registerDevice(title, silent){
+  const sub=await pushSubscription();
+  if(!sub){ if(!silent) toast("Turn on notifications first"); return; }
+  const services=selectedServices()||serviceUniverse();
+  const payload={subscription:JSON.parse(JSON.stringify(sub)),watchlist:WATCH,services:services,tz:TZ};
+  fileIssue("register",payload,title||"Update my alerts");
 }
 async function showNotifState(justEnabled){
   const el=$("notifState"); if(!el) return;
@@ -371,7 +381,7 @@ function escAttr(s){return esc(s).replace(/"/g,"&quot;");}
 function emptyBlock(big,small){return `<div class="empty"><div class="big">${esc(big)}</div>${esc(small)}</div>`;}
 
 const TITLES={now:["On Now","Live across your services"],new:["New Episodes","First-run, next two weeks"],
-  shows:["My Shows","Next airings for your list"],setup:["Setup","Channels & notifications"]};
+  shows:["My Shows","Next airings for your list"],setup:["Setup","Your services & alerts"]};
 let CURRENT="now";
 function render(){
   if(CURRENT==="now")renderNow();

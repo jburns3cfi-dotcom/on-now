@@ -167,8 +167,32 @@ def _deserialize(rows):
     return out
 
 
-def send_push(payload):
+def _send_one(webpush, WebPushException, info, payload, priv, subject):
+    """Send to one endpoint. Returns 'ok' | 'dead' | 'error'. NEVER raises."""
+    try:
+        webpush(subscription_info=info, data=json.dumps(payload),
+                vapid_private_key=priv, vapid_claims={"sub": subject})
+        return "ok"
+    except WebPushException as e:
+        status = getattr(getattr(e, "response", None), "status_code", None)
+        return "dead" if status in (404, 410) else "error"
+    except Exception:
+        return "error"
+
+
+def _sub_watchlist(sub):
+    wl = sub.get("watchlist") if isinstance(sub, dict) else None
+    return [core.safe_str(t) for t in wl if core.safe_str(t)] if isinstance(wl, list) else []
+
+
+def _sub_services(sub):
+    sv = sub.get("services") if isinstance(sub, dict) else None
+    return [core.safe_str(s) for s in sv if core.safe_str(s)] if isinstance(sv, list) else []
+
+
+def run_notify(mode):
     from pywebpush import webpush, WebPushException
+    schedule = _deserialize(read_json("schedule.json", []))
     subs = read_json("subscribers.json", [])
     if not isinstance(subs, list) or not subs:
         print("no subscribers")
@@ -178,53 +202,46 @@ def send_push(payload):
     if not priv:
         print("VAPID_PRIVATE_KEY missing; cannot send")
         return 1
+    env_tz = core.safe_int(os.environ.get("TZ_OFFSET_MIN"), 0)
+    now = datetime.now(timezone.utc)
     alive, sent = [], 0
-    body = json.dumps(payload)
+
     for sub in subs:
         info = sub.get("subscription") if isinstance(sub, dict) else None
         if not isinstance(info, dict):
             continue
-        try:
-            webpush(subscription_info=info, data=body,
-                    vapid_private_key=priv, vapid_claims={"sub": subject})
+        watchlist = _sub_watchlist(sub)
+        my_sched = core.filter_schedule_by_services(schedule, _sub_services(sub))
+        tz = core.safe_int(sub.get("tz"), env_tz) if isinstance(sub, dict) else env_tz
+
+        payloads = []
+        if mode == "notify-digest":
+            day_end = now + timedelta(hours=24)
+            wl_hits = [r for r in core.annotate_watchlist(my_sched, watchlist, now)
+                       if r.get("next") and r["next"]["start"] <= day_end]
+            wl_recs = [r["next"] for r in wl_hits]
+            new_today = [r for r in core.upcoming_new_episodes(my_sched, now)
+                         if r["start"] <= day_end]
+            if wl_recs or new_today:
+                payloads.append(core.build_digest(wl_recs, new_today, tz))
+        else:  # notify-soon
+            for rec in core.starting_soon(my_sched, watchlist, now):
+                payloads.append(core.build_soon_alert(rec, tz))
+
+        status = "ok"
+        for p in payloads:
+            status = _send_one(webpush, WebPushException, info, p, priv, subject)
+            if status == "ok":
+                sent += 1
+            if status == "dead":
+                break
+        if status != "dead":
             alive.append(sub)
-            sent += 1
-        except WebPushException as e:
-            status = getattr(getattr(e, "response", None), "status_code", None)
-            if status in (404, 410):
-                continue  # drop dead endpoint
-            alive.append(sub)
-        except Exception:
-            alive.append(sub)
+
     if len(alive) != len(subs):
         write_json("subscribers.json", alive)
-    print("push sent to %d endpoints" % sent)
+    print("personalized push: %d notifications, %d devices" % (sent, len(alive)))
     return 0
-
-
-def run_notify(mode):
-    schedule = _deserialize(read_json("schedule.json", []))
-    watchlist = read_json("watchlist.json", [])
-    if isinstance(watchlist, dict):
-        watchlist = watchlist.get("titles", [])
-    tz = core.safe_int(os.environ.get("TZ_OFFSET_MIN"), 0)
-    now = datetime.now(timezone.utc)
-    if mode == "notify-digest":
-        day_end = now + timedelta(hours=24)
-        wl_hits = [r for r in core.annotate_watchlist(schedule, watchlist, now)
-                   if r.get("next") and r["next"]["start"] <= day_end]
-        wl_recs = [r["next"] for r in wl_hits]
-        new_today = [r for r in core.upcoming_new_episodes(schedule, now)
-                     if r["start"] <= day_end]
-        return send_push(core.build_digest(wl_recs, new_today, tz))
-    soon = core.starting_soon(schedule, watchlist, now)
-    if not soon:
-        print("nothing starting soon")
-        return 0
-    rc = 0
-    for rec in soon:
-        rc |= send_push(core.build_soon_alert(rec, tz))
-    return rc
 
 
 def main(argv):

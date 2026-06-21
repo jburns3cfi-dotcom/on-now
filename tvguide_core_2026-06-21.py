@@ -235,7 +235,14 @@ def build_schedule(raw_schedules, program_index: dict, channels) -> list:
                     continue
                 rec["channel_number"] = safe_str(chan.get("number"))
                 rec["channel_name"] = safe_str(chan.get("name")) or safe_str(chan.get("callsign"))
-                rec["service"] = safe_str(chan.get("service"))
+                svcs = chan.get("services")
+                if isinstance(svcs, list):
+                    services = [safe_str(s) for s in svcs if safe_str(s)]
+                else:
+                    one = safe_str(chan.get("service"))
+                    services = [one] if one else []
+                rec["service"] = services[0] if services else ""
+                rec["services"] = services
                 out.append(rec)
         out.sort(key=lambda r: (r["start"], r["channel_name"]))
         return out
@@ -475,7 +482,61 @@ def serialize_schedule(schedule) -> list:
                 "channel_number": safe_str(rec.get("channel_number")),
                 "channel_name": safe_str(rec.get("channel_name")),
                 "service": safe_str(rec.get("service")),
+                "services": [safe_str(s) for s in rec.get("services")] if isinstance(rec.get("services"), list) else ([safe_str(rec.get("service"))] if safe_str(rec.get("service")) else []),
             })
         return out
     except Exception:
         return out
+
+
+def _rec_services(rec) -> list:
+    """Service names a record belongs to (list, with single-service fallback). NEVER raises."""
+    try:
+        if not isinstance(rec, dict):
+            return []
+        rsv = rec.get("services")
+        if isinstance(rsv, list):
+            return [safe_str(s) for s in rsv if safe_str(s)]
+        one = safe_str(rec.get("service"))
+        return [one] if one else []
+    except Exception:
+        return []
+
+
+def filter_schedule_by_services(schedule, services) -> list:
+    """Keep airings on any of the selected services. Empty/None selection => all.
+
+    NEVER raises.
+    """
+    try:
+        if not isinstance(schedule, list):
+            return []
+        if isinstance(services, (list, tuple, set)):
+            sel = set(safe_str(s).casefold() for s in services if safe_str(s))
+        else:
+            sel = set()
+        if not sel:
+            return list(schedule)
+        out = []
+        for rec in schedule:
+            names = _rec_services(rec)
+            if any(safe_str(n).casefold() in sel for n in names):
+                out.append(rec)
+        return out
+    except Exception:
+        return []
+
+
+def services_universe(schedule) -> list:
+    """Distinct service names present in the guide, in first-seen order. NEVER raises."""
+    try:
+        seen, keys = [], set()
+        for rec in (schedule if isinstance(schedule, list) else []):
+            for n in _rec_services(rec):
+                k = safe_str(n).casefold()
+                if k and k not in keys:
+                    keys.add(k)
+                    seen.append(safe_str(n))
+        return seen
+    except Exception:
+        return []
