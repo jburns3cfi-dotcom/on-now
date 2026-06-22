@@ -1,24 +1,25 @@
 name: onnow
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - "public/**"
+      - "index.html"
+      - "sw.js"
+      - "manifest.webmanifest"
+      - "icon-*.png"
   schedule:
-    - cron: "15 5 * * *"
     - cron: "0 12 * * *"
     - cron: "*/15 * * * *"
   workflow_dispatch:
     inputs:
       mode:
-        description: "build | notify-digest | notify-soon | headends | add | remove | list"
-        default: "build"
+        description: "notify-digest | notify-soon"
+        default: "notify-digest"
         required: true
-      arg:
-        description: "ZIP (headends) or LINEUP id (add/remove)"
-        default: ""
-        required: false
-      filter:
-        description: "list only: comma-separated callsigns/keywords"
-        default: ""
-        required: false
+  issues:
+    types: [opened]
 
 permissions:
   contents: write
@@ -37,8 +38,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
+        with: { python-version: "3.12" }
       - name: Apply submission
         env:
           ISSUE_BODY: ${{ github.event.issue.body }}
@@ -47,77 +47,62 @@ jobs:
         run: |
           git config user.name "onnow-bot"
           git config user.email "onnow-bot@users.noreply.github.com"
-          git add public/config.json public/watchlist.json public/subscribers.json 2>/dev/null || true
+          git add public/config.json public/subscribers.json 2>/dev/null || true
           if ! git diff --cached --quiet; then
-            git commit -m "onnow: apply submission #${{ github.event.issue.number }}"
+            git commit -m "onnow: submission #${{ github.event.issue.number }}"
             git push
           fi
       - name: Close issue
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        env: { GH_TOKEN: "${{ secrets.GITHUB_TOKEN }}" }
         run: gh issue close "${{ github.event.issue.number }}" -c "Saved." -R "${{ github.repository }}"
 
-  run:
-    if: github.event_name != 'issues'
+  notify:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install pywebpush
+      - name: Decide mode
+        id: mode
+        run: |
+          case "${{ github.event.schedule }}" in
+            "0 12 * * *")   echo "mode=notify-digest" >> "$GITHUB_OUTPUT" ;;
+            "*/15 * * * *") echo "mode=notify-soon" >> "$GITHUB_OUTPUT" ;;
+            *)              echo "mode=${{ github.event.inputs.mode || 'notify-digest' }}" >> "$GITHUB_OUTPUT" ;;
+          esac
+      - name: Send ${{ steps.mode.outputs.mode }}
+        env:
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+          VAPID_SUBJECT: ${{ secrets.VAPID_SUBJECT }}
+          TZ_OFFSET_MIN: ${{ vars.TZ_OFFSET_MIN }}
+        run: python "tvguide_job_2026-06-21.py" "${{ steps.mode.outputs.mode }}"
+      - name: Commit pruned subscribers
+        run: |
+          git config user.name "onnow-bot"
+          git config user.email "onnow-bot@users.noreply.github.com"
+          git add public/subscribers.json 2>/dev/null || true
+          if ! git diff --cached --quiet; then
+            git commit -m "onnow: prune subscribers"
+            git push
+          fi
+
+  deploy:
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
-      - name: Decide mode
-        id: mode
-        run: |
-          case "${{ github.event.schedule }}" in
-            "15 5 * * *")   echo "mode=build" >> "$GITHUB_OUTPUT" ;;
-            "0 12 * * *")   echo "mode=notify-digest" >> "$GITHUB_OUTPUT" ;;
-            "*/15 * * * *") echo "mode=notify-soon" >> "$GITHUB_OUTPUT" ;;
-            *)              echo "mode=${{ github.event.inputs.mode || 'build' }}" >> "$GITHUB_OUTPUT" ;;
-          esac
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: Install deps
-        run: pip install requests pywebpush
-      - name: Run ${{ steps.mode.outputs.mode }}
-        env:
-          SD_USERNAME: ${{ secrets.SD_USERNAME }}
-          SD_PASSWORD: ${{ secrets.SD_PASSWORD }}
-          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
-          VAPID_SUBJECT: ${{ secrets.VAPID_SUBJECT }}
-          TZ_OFFSET_MIN: ${{ vars.TZ_OFFSET_MIN }}
-        run: |
-          MODE="${{ steps.mode.outputs.mode }}"
-          case "$MODE" in
-            headends|add|remove|list)
-              python "sd_lineups_2026-06-21.py" "$MODE" "${{ github.event.inputs.arg }}" --filter "${{ github.event.inputs.filter }}" ;;
-            *)
-              python "tvguide_job_2026-06-21.py" "$MODE" ;;
-          esac
-      - name: Commit state changes
-        run: |
-          git config user.name "onnow-bot"
-          git config user.email "onnow-bot@users.noreply.github.com"
-          git add public/schedule.json public/meta.json public/subscribers.json public/config.json 2>/dev/null || true
-          if ! git diff --cached --quiet; then
-            git commit -m "onnow: ${{ steps.mode.outputs.mode }} $(date -u +%FT%TZ)"
-            git push
-          else
-            echo "no changes"
-          fi
       - name: Assemble site
-        if: steps.mode.outputs.mode == 'build'
         run: |
           rm -rf _site && mkdir _site
           cp index.html sw.js manifest.webmanifest icon-192.png icon-512.png _site/ 2>/dev/null || true
           cp public/*.json _site/ 2>/dev/null || true
           rm -f _site/subscribers.json _site/*.tmp
-      - name: Upload Pages artifact
-        if: steps.mode.outputs.mode == 'build'
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: _site
-      - name: Deploy Pages
-        id: deploy
-        if: steps.mode.outputs.mode == 'build'
+      - uses: actions/upload-pages-artifact@v3
+        with: { path: _site }
+      - id: deploy
         uses: actions/deploy-pages@v4
