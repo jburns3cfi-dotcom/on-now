@@ -198,6 +198,8 @@ const REPO_OWNER = "jburns3cfi-dotcom";
 const REPO_NAME  = "on-now";
 // Generated for you; matches the VAPID secret in GitHub:
 const VAPID_PUBLIC_KEY = "BEpGEakDlmL6dVxQ7GAFYi-4aKxFLTEjX7Pl2lWJ9Jo6naaiMKbRP2bNmD2YucozMtFooYv8r0EO9ns5PUL9e4E";
+// Alert sign-up endpoint (your Cloudflare Worker URL):
+const WORKER_URL = "https://onnow-register.jburns3cfi.workers.dev";
 
 const S = x => (x===undefined||x===null) ? "" : (""+x);
 const norm = x => S(x).toLowerCase().replace(/[^0-9a-z\u00c0-\uffff ]+/g," ").replace(/\s+/g," ").trim();
@@ -447,24 +449,32 @@ function renderSetup(){
 function urlB64ToUint8(base64){const pad="=".repeat((4-base64.length%4)%4);
   const b=(base64+pad).replace(/-/g,"+").replace(/_/g,"/");const raw=atob(b);
   return Uint8Array.from([...raw].map(c=>c.charCodeAt(0)));}
-async function enableNotifications(){
+async function ensureSubscription(){
+  if(!("serviceWorker" in navigator)||!("PushManager" in window)){toast("This device can't do web push");return null;}
+  let sub=await pushSubscription();
+  if(sub) return sub;
+  let perm=Notification.permission;
+  if(perm==="default") perm=await Notification.requestPermission();
+  if(perm==="denied"){toast("Notifications are blocked — turn them on for this site in your browser settings");return null;}
+  if(perm!=="granted"){toast("Notifications were not allowed");return null;}
   try{
-    if(!("serviceWorker" in navigator)||!("PushManager" in window)){toast("This device can't do web push");return;}
-    const perm=await Notification.requestPermission();
-    if(perm!=="granted"){toast("Notifications were not allowed");return;}
     const reg=await navigator.serviceWorker.ready;
-    await reg.pushManager.subscribe({userVisibleOnly:true,
+    return await reg.pushManager.subscribe({userVisibleOnly:true,
       applicationServerKey:urlB64ToUint8(VAPID_PUBLIC_KEY)});
-    registerDevice("Turn on my alerts");
-    showNotifState(true);
-  }catch(e){toast("Could not enable notifications");}
+  }catch(e){toast("Couldn't turn on notifications on this device");return null;}
 }
+async function enableNotifications(){ await registerDevice("Turn on my alerts"); }
 async function registerDevice(title, silent){
-  const sub=await pushSubscription();
-  if(!sub){ if(!silent) toast("Turn on notifications first"); return; }
-  const services=selectedServices()||serviceUniverse();
-  const payload={subscription:JSON.parse(JSON.stringify(sub)),watchlist:WATCH,services:services,tz:TZ};
-  fileIssue("register",payload,title||"Update my alerts");
+  let sub = silent ? await pushSubscription() : await ensureSubscription();
+  if(!sub){ return; }
+  if(WORKER_URL.indexOf("REPLACE_")>=0){ if(!silent) toast("Alert service isn't set up yet"); return; }
+  const payload={subscription:JSON.parse(JSON.stringify(sub)),watchlist:WATCH,
+                 services:selectedServices()||serviceUniverse(),tz:TZ};
+  try{
+    const r=await fetch(WORKER_URL,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
+    if(r.ok){ if(!silent) toast("Alerts on for this device"); showNotifState(true); }
+    else { if(!silent) toast("Couldn't save alerts — try again"); }
+  }catch(e){ if(!silent) toast("Couldn't reach the alert service"); }
 }
 async function showNotifState(justEnabled){
   const el=$("notifState"); if(!el) return;
