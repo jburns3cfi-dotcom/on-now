@@ -116,6 +116,16 @@
   .airing:last-child{border-bottom:none}
   .airing .w{font-family:"IBM Plex Mono",monospace;color:var(--text);flex:1}
   .airing .ch{color:var(--amber)}
+  .grouplist{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:4px}
+  .groupbtn{display:flex;flex-direction:column;align-items:center;gap:5px;padding:20px 8px;
+    background:var(--panel);border:1px solid var(--line);border-radius:14px;color:var(--text);
+    font-family:"Bricolage Grotesque",Inter;font-size:18px;font-weight:600;cursor:pointer}
+  .groupbtn:active{border-color:var(--amber)}
+  .groupbtn:disabled{opacity:.35}
+  .groupbtn .gn{font-size:11px;color:var(--muted);font-weight:500;font-family:"IBM Plex Mono",monospace}
+  .backbtn{background:none;border:none;color:var(--amber);font-family:Inter;font-size:14px;
+    padding:4px 0 8px;cursor:pointer}
+  .ghdr{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:10px}
 
   .empty{text-align:center;color:var(--muted);padding:48px 16px;line-height:1.6}
   .empty .big{font-size:15px;color:var(--text);margin-bottom:6px}
@@ -283,7 +293,7 @@ function showIndex(){
     if(!m.next||r._s<m.next._s) m.next=r;
     if(r.is_new&&(!m.nextNew||r._s<m.nextNew._s)) m.nextNew=r;
   }
-  return Object.values(map).sort((a,b)=>S(a.title).localeCompare(S(b.title)));
+  return Object.values(map).sort((a,b)=>sortKey(a.title).localeCompare(sortKey(b.title)));
 }
 function nextForTitle(title,newOnly){
   const want=norm(title), now=new Date(); let best=null;
@@ -303,25 +313,57 @@ function airingsForTitle(title){
 function isFav(t){return WATCH.some(x=>norm(x)===norm(t));}
 function toggleFav(t){ if(isFav(t)) delWatch(t); else addWatch(t); }
 
-// ---- view: Browse / search ------------------------------------------------
-function renderBrowse(){
-  const el=$("view-browse");
-  const q=S(el._q||"").trim();
-  const shows=showIndex().filter(s=>!q||norm(s.title).includes(norm(q)));
-  const rows=shows.slice(0,400).map(s=>{
-    const on=isFav(s.title)?"on":"";
-    const when=s.nextNew?`New ep ${fmtWhen(s.nextNew.start)} · ${esc(s.nextNew.channel_name)}`
-              :(s.next?`Next ${fmtWhen(s.next.start)} · ${esc(s.next.channel_name)}`:"");
-    return `<div class="showrow" data-show="${escAttr(s.title)}">
-      <div class="grow"><div class="nm">${esc(s.title)||"Programming"}</div><div class="meta2">${when}</div></div>
-      <button class="star ${on}" data-fav="${escAttr(s.title)}" aria-label="Favorite">${on?"★":"☆"}</button></div>`;
-  }).join("");
-  el.innerHTML=`<input class="search" id="browseQ" placeholder="Search shows…" value="${escAttr(q)}">
-    ${shows.length?rows:emptyBlock(q?"No matches":"No shows yet","Pick your services in Setup, or the guide hasn't loaded.")}`;
+// ---- view: Browse (letter groups + search) --------------------------------
+const BGROUPS=[["A–C","ABC"],["D–F","DEF"],["G–I","GHI"],["J–L","JKL"],
+  ["M–O","MNO"],["P–R","PQR"],["S–U","STU"],["V–Z","VWXYZ"],["0–9 · #","#"]];
+function sortKey(t){return norm(t).replace(/^(the|a|an) +/,"");}
+function firstKey(t){const c=sortKey(t).charAt(0).toUpperCase();return (c>="A"&&c<="Z")?c:"#";}
+function showRowHTML(s){
+  const on=isFav(s.title)?"on":"";
+  const when=s.nextNew?`New ep ${fmtWhen(s.nextNew.start)} · ${esc(s.nextNew.channel_name)}`
+            :(s.next?`Next ${fmtWhen(s.next.start)} · ${esc(s.next.channel_name)}`:"");
+  return `<div class="showrow" data-show="${escAttr(s.title)}">
+    <div class="grow"><div class="nm">${esc(s.title)||"Programming"}</div><div class="meta2">${when}</div></div>
+    <button class="star ${on}" data-fav="${escAttr(s.title)}" aria-label="Favorite">${on?"★":"☆"}</button></div>`;
+}
+function bindBrowse(el,all){
   const inp=$("browseQ");
-  inp.oninput=()=>{el._q=inp.value;const p=inp.selectionStart;renderBrowse();const n=$("browseQ");if(n){n.focus();try{n.setSelectionRange(p,p);}catch(e){}}};
+  if(inp) inp.oninput=()=>{el._q=inp.value;el._group=null;const p=inp.selectionStart;renderBrowse();const n=$("browseQ");if(n){n.focus();try{n.setSelectionRange(p,p);}catch(e){}}};
   el.querySelectorAll("[data-fav]").forEach(b=>b.onclick=(e)=>{e.stopPropagation();toggleFav(b.getAttribute("data-fav"));renderBrowse();});
   el.querySelectorAll("[data-show]").forEach(b=>b.onclick=()=>openShow(b.getAttribute("data-show")));
+  const bk=$("browseBack"); if(bk) bk.onclick=()=>{el._group=null;el._q="";renderBrowse();};
+}
+function browseList(el,all,shows,q,backLabel){
+  const CAP=600;
+  const rows=shows.slice(0,CAP).map(showRowHTML).join("");
+  const back=backLabel?`<button class="backbtn" id="browseBack">‹ All shows</button><div class="ghdr">${esc(backLabel)} · ${shows.length}</div>`:"";
+  const more=shows.length>CAP?`<div class="help" style="text-align:center;padding:12px 8px">Showing ${CAP} of ${shows.length} — type above to narrow.</div>`:"";
+  el.innerHTML=`<input class="search" id="browseQ" placeholder="Search ${all.length} shows…" value="${escAttr(q)}">
+    ${back}${shows.length?rows+more:emptyBlock(q?"No matches":"None in this group","")}`;
+  bindBrowse(el,all);
+}
+function renderBrowse(){
+  const el=$("view-browse");
+  const all=showIndex();
+  const q=S(el._q||"").trim();
+  if(q){ browseList(el,all,all.filter(s=>norm(s.title).includes(norm(q))),q,null); return; }
+  if(el._group){
+    const g=el._group;
+    const subset=all.filter(s=>{const k=firstKey(s.title);return g.hash?k==="#":g.letters.indexOf(k)>=0;});
+    browseList(el,all,subset,"",g.label); return;
+  }
+  if(!all.length){ el.innerHTML=emptyBlock("No shows yet","Pick your services in Setup, or the guide hasn't loaded."); return; }
+  const counts={};
+  for(const s of all){const k=firstKey(s.title);counts[k]=(counts[k]||0)+1;}
+  const groups=BGROUPS.map(g=>{
+    const hash=g[1]==="#", letters=hash?[]:g[1].split("");
+    const n=hash?(counts["#"]||0):letters.reduce((a,L)=>a+(counts[L]||0),0);
+    return {label:g[0],letters,hash,n};
+  });
+  el.innerHTML=`<input class="search" id="browseQ" placeholder="Search ${all.length} shows…" value="">
+    <div class="grouplist">${groups.map((b,i)=>`<button class="groupbtn" data-g="${i}"${b.n?"":" disabled"}>${b.label}<span class="gn">${b.n}</span></button>`).join("")}</div>`;
+  bindBrowse(el,all);
+  el.querySelectorAll("[data-g]").forEach(btn=>btn.onclick=()=>{el._group=groups[+btn.getAttribute("data-g")];el._q="";renderBrowse();});
 }
 
 // ---- view: Favorites ------------------------------------------------------
