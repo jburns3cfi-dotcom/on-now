@@ -3,12 +3,6 @@ name: onnow
 on:
   push:
     branches: [main]
-    paths:
-      - "public/**"
-      - "index.html"
-      - "sw.js"
-      - "manifest.webmanifest"
-      - "icon-*.png"
   schedule:
     - cron: "0 12 * * *"
     - cron: "*/15 * * * *"
